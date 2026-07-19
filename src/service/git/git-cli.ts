@@ -123,6 +123,17 @@ export default class GitCLIService {
   }
 
   /**
+   * Check if a branch exists in a remote repository.
+   * @param remote remote name or URL
+   * @param branch branch name to search
+   */
+  async remoteBranchExists(remote: string, branch: string): Promise<boolean> {
+    this.logger.info(`Checking if branch ${branch} exists on ${remote}`);
+    const output = await simpleGit().raw(["ls-remote", "--heads", this.remoteWithAuth(remote), branch]);
+    return output.trim().length > 0;
+  }
+
+  /**
    * Get cherry-pick a specific sha
    * @param cwd repository in which the sha should be cherry picked to
    * @param sha commit sha

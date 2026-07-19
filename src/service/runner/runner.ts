@@ -14,7 +14,7 @@ import { injectError, injectTargetBranch } from "./runner-util";
 interface Git {
   gitClientType: GitClientType;
   gitClientApi: Pick<GitClient, ("createPullRequest" | "createPullRequestComment")>;
-  gitCli: Pick<GitCLIService, ("clone" | "createLocalBranch" | "fetch" | "cherryPick" | "addRemote" | "push")>;
+  gitCli: Pick<GitCLIService, ("clone" | "createLocalBranch" | "fetch" | "remoteBranchExists" | "cherryPick" | "addRemote" | "push")>;
 }
 
 /**
@@ -125,6 +125,13 @@ export default class Runner {
   }
 
   async executeBackport(configs: Configs, backportPR: BackportPullRequest, git: Git): Promise<void> {
+    const remote = backportPR.headRepo?.cloneUrl ?? backportPR.cloneUrl;
+    const branchExists = await git.gitCli.remoteBranchExists(remote, backportPR.head);
+    if (branchExists) {
+      this.logger.warn(`Backport branch ${backportPR.head} already exists on ${remote}, skipping`);
+      return;
+    }
+
     let i = 0;
     for (const step of backportSteps(this.logger, configs, backportPR, git)) {
       try {
@@ -258,6 +265,9 @@ async function backportScript(configs: Configs, backportPR: BackportPullRequest,
     },
     async fetch(_cwd: string, branch: string, remote = "origin"): Promise<void> {
       s += `git fetch ${remote} ${branch}`;
+    },
+    async remoteBranchExists(_remote: string, _branch: string): Promise<boolean> {
+      return false;
     },
     async cherryPick(_cwd: string, sha: string, strategy = "recursive", strategyOption = "theirs", cherryPickOptions: string | undefined): Promise<void> {
       s += `git cherry-pick -m 1 --strategy=${strategy} --strategy-option=${strategyOption} `;
