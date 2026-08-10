@@ -156,10 +156,14 @@ export default class Runner {
 function* backportSteps(logger: Pick<LoggerService, "debug" | "info" | "warn">, configs: Configs, backportPR: BackportPullRequest, git: Git): Generator<() => Promise<void>, void, unknown> {
   // every failible operation should be in one dedicated closure
 
+  // whether the backport pr targets a different repository than the original pull request's one (--tb-repo),
+  // in which case the original pr's commits are not reachable from a clone of the backport target repo alone
+  const usingDifferentTargetRepo = backportPR.cloneUrl !== configs.originalPullRequest.targetRepo.cloneUrl;
+
   // 4. clone the repository
   yield async () => {
     logger.debug("Cloning repo..");
-    await git.gitCli.clone(configs.originalPullRequest.targetRepo.cloneUrl, configs.folder, backportPR.base);
+    await git.gitCli.clone(backportPR.cloneUrl, configs.folder, backportPR.base);
   };
 
   // 5. create new branch from target one and checkout
@@ -168,9 +172,28 @@ function* backportSteps(logger: Pick<LoggerService, "debug" | "info" | "warn">, 
     await git.gitCli.createLocalBranch(configs.folder, backportPR.head);
   };
 
-  // 6. fetch pull request remote if source owner != target owner or pull request still open
-  if (configs.originalPullRequest.sourceRepo.owner !== configs.originalPullRequest.targetRepo.owner ||
+  if (usingDifferentTargetRepo) {
+    // 6. add a remote pointing to the original pull request's repository, needed to fetch
+    // commits that only exist there, since the backport target repo won't have them
+    const commitsRemote = "upstream";
+    yield async () => {
+      await git.gitCli.addRemote(configs.folder, configs.originalPullRequest.targetRepo.cloneUrl, commitsRemote);
+    };
+
+    // 7. fetch the exact commits to backport from the original repository.
+    // Fetching "pull/<N>/head" is not enough here: for a merged (or squashed) pull request the
+    // commit to cherry-pick is the merge/squash commit which lives on the base branch, not on
+    // "pull/<N>/head". Fetching the shas directly makes them available regardless of squash mode.
+    yield async () => {
+      logger.debug("Fetching commits to backport from the original repository..");
+      for (const sha of configs.originalPullRequest.commits) {
+        await git.gitCli.fetch(configs.folder, sha, commitsRemote);
+      }
+    };
+  } else if (
+    configs.originalPullRequest.sourceRepo.owner !== configs.originalPullRequest.targetRepo.owner ||
     configs.originalPullRequest.state === "open") {
+    // 7. fetch pull request remote if source owner != target owner or pull request still open
     yield async () => {
       logger.debug("Fetching pull request remote..");
       const prefix = git.gitClientType === GitClientType.GITLAB ? "merge-requests" : "pull"; // default is for gitlab
@@ -178,7 +201,7 @@ function* backportSteps(logger: Pick<LoggerService, "debug" | "info" | "warn">, 
     };
   }
 
-  // 7. apply all changes to the new branch
+  // 8. apply all changes to the new branch
   yield async () => {
     logger.debug("Cherry picking commits..");
   };
@@ -191,7 +214,7 @@ function* backportSteps(logger: Pick<LoggerService, "debug" | "info" | "warn">, 
   let target_remote: string | undefined = undefined;
 
   if (backportPR.headRepo) {
-    // 8. add fork-remote to push backport branch to
+    // 9. add fork-remote to push backport branch to
     target_remote = "fork";
     yield async () => {
         await git.gitCli.addRemote(configs.folder, backportPR.headRepo!.cloneUrl, target_remote);
@@ -199,12 +222,12 @@ function* backportSteps(logger: Pick<LoggerService, "debug" | "info" | "warn">, 
   }
 
   if (!configs.dryRun) {
-    // 9. push the new branch to origin
+    // 10. push the new branch to origin
     yield async () => {
         await git.gitCli.push(configs.folder, backportPR.head, target_remote);
     };
 
-    // 10. create pull request new branch -> target branch (using octokit)
+    // 11. create pull request new branch -> target branch (using octokit)
     yield async () => {
       const prUrl = await git.gitClientApi.createPullRequest(backportPR);
       logger.info(`Pull request created: ${prUrl}`);

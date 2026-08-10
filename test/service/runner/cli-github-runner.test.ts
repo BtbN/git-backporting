@@ -232,6 +232,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-28f63db",
         base: "target",
         title: "[target] PR Title",
@@ -269,6 +270,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-28f63db",
         headRepo: {
           cloneUrl: "https://github.com/my-fork/reponame.git",
@@ -284,6 +286,90 @@ describe("cli runner", () => {
         comments: [],
       }
     );
+  });
+
+  test("without dry run using target backport repo", async () => {
+    addProcessArgs([
+      "-tb",
+      "target",
+      "-pr",
+      "https://github.com/owner/reponame/pull/2368",
+      "--tb-repo",
+      "target-org/reponame",
+    ]);
+
+    await runner.execute();
+
+    const cwd = process.cwd() + "/bp";
+
+    expect(GitCLIService.prototype.clone).toHaveBeenCalledTimes(1);
+    expect(GitCLIService.prototype.clone).toHaveBeenCalledWith("https://github.com/target-org/reponame.git", cwd, "target");
+
+    // the original repo is added as a remote and the commits to backport are fetched from it
+    // by sha (not via pull/<N>/head), so merged/squashed PRs work without --no-squash
+    expect(GitCLIService.prototype.addRemote).toHaveBeenCalledTimes(1);
+    expect(GitCLIService.prototype.addRemote).toHaveBeenCalledWith(cwd, "https://github.com/owner/reponame.git", "upstream");
+
+    expect(GitCLIService.prototype.fetch).toHaveBeenCalledTimes(1);
+    expect(GitCLIService.prototype.fetch).toHaveBeenCalledWith(cwd, "28f63db774185f4ec4b57cd9aaeb12dbfb4c9ecc", "upstream");
+
+    expect(GitCLIService.prototype.push).toHaveBeenCalledTimes(1);
+    expect(GitCLIService.prototype.push).toHaveBeenCalledWith(cwd, "bp-target-28f63db", undefined);
+
+    expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledTimes(1);
+    expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
+        owner: "target-org",
+        repo: "reponame",
+        cloneUrl: "https://github.com/target-org/reponame.git",
+        head: "bp-target-28f63db",
+        base: "target",
+        title: "[target] PR Title",
+        body: "**Backport:** https://github.com/owner/reponame/pull/2368\r\n\r\nPlease review and merge",
+        reviewers: ["gh-user", "that-s-a-user"],
+        assignees: [],
+        labels: [],
+        comments: [],
+      }
+    );
+  });
+
+  test("using target backport repo with multiple commits fetches every sha", async () => {
+    addProcessArgs([
+      "-tb",
+      "target",
+      "-pr",
+      "https://github.com/owner/reponame/pull/8632",
+      "--tb-repo",
+      "target-org/reponame",
+      "--no-squash",
+    ]);
+
+    await runner.execute();
+
+    const cwd = process.cwd() + "/bp";
+
+    expect(GitCLIService.prototype.clone).toHaveBeenCalledTimes(1);
+    expect(GitCLIService.prototype.clone).toHaveBeenCalledWith("https://github.com/target-org/reponame.git", cwd, "target");
+
+    expect(GitCLIService.prototype.addRemote).toHaveBeenCalledTimes(1);
+    expect(GitCLIService.prototype.addRemote).toHaveBeenCalledWith(cwd, "https://github.com/owner/reponame.git", "upstream");
+
+    // both commits of the pr must be fetched by sha from the original repo
+    expect(GitCLIService.prototype.fetch).toHaveBeenCalledTimes(2);
+    expect(GitCLIService.prototype.fetch).toHaveBeenCalledWith(cwd, "0404fb922ab75c3a8aecad5c97d9af388df04695", "upstream");
+    expect(GitCLIService.prototype.fetch).toHaveBeenCalledWith(cwd, "11da4e38aa3e577ffde6d546f1c52e53b04d3151", "upstream");
+
+    expect(GitCLIService.prototype.cherryPick).toHaveBeenCalledTimes(2);
+    expect(GitCLIService.prototype.cherryPick).toHaveBeenCalledWith(cwd, "0404fb922ab75c3a8aecad5c97d9af388df04695", undefined, undefined, undefined);
+    expect(GitCLIService.prototype.cherryPick).toHaveBeenLastCalledWith(cwd, "11da4e38aa3e577ffde6d546f1c52e53b04d3151", undefined, undefined, undefined);
+
+    expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledTimes(1);
+    expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith(expect.objectContaining({
+      owner: "target-org",
+      repo: "reponame",
+      cloneUrl: "https://github.com/target-org/reponame.git",
+      base: "target",
+    }));
   });
 
   test("same owner", async () => {
@@ -319,6 +405,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-28f63db",
         base: "target",
         title: "[target] PR Title",
@@ -378,6 +465,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-9174896",
         base: "target",
         title: "[target] PR Title",
@@ -427,6 +515,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
 	owner: "owner",
 	repo: "reponame",
+	cloneUrl: "https://github.com/owner/reponame.git",
 	head: "bp-target-0404fb9-11da4e3",
 	base: "target",
 	title: "[target] PR Title",
@@ -486,6 +575,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp_branch_name",
         base: "target",
         title: "New Title",
@@ -544,6 +634,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp_branch_name",
         base: "target",
         title: "New Title",
@@ -594,6 +685,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-28f63db",
         base: "target",
         title: "[target] PR Title",
@@ -643,6 +735,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-28f63db",
         base: "target",
         title: "[target] PR Title",
@@ -688,6 +781,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp_branch_name",
         base: "target",
         title: "New Title",
@@ -736,6 +830,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-28f63db",
         base: "target",
         title: "[target] PR Title",
@@ -784,6 +879,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-0404fb9-11da4e3",
         base: "target",
         title: "[target] PR Title",
@@ -838,6 +934,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: truncatedBranch,
         base: "target",
         title: "[target] PR Title",
@@ -890,6 +987,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-0404fb9-11da4e3",
         base: "target",
         title: "[target] PR Title",
@@ -940,6 +1038,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-target-28f63db",
         base: "target",
         title: "[target] PR Title",
@@ -997,6 +1096,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-v1-28f63db",
         base: "v1",
         title: "[v1] PR Title",
@@ -1009,6 +1109,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-v2-28f63db",
         base: "v2",
         title: "[v2] PR Title",
@@ -1021,6 +1122,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "bp-v3-28f63db",
         base: "v3",
         title: "[v3] PR Title",
@@ -1031,6 +1133,62 @@ describe("cli runner", () => {
         comments: [],
     });
     expect(GitHubClient.prototype.createPullRequest).toHaveReturnedTimes(3);
+  });
+
+  test("with multiple target branches using target backport repo", async () => {
+    addProcessArgs([
+      "-tb",
+      "v1, v2, v3",
+      "-pr",
+      "https://github.com/owner/reponame/pull/2368",
+      "--tb-repo",
+      "target-org/reponame",
+      "-f",
+      "/tmp/folder"
+    ]);
+
+    await runner.execute();
+
+    const cwd = "/tmp/folder";
+
+    expect(GitCLIService.prototype.clone).toHaveBeenCalledTimes(3);
+    expect(GitCLIService.prototype.clone).toHaveBeenCalledWith("https://github.com/target-org/reponame.git", cwd, "v1");
+    expect(GitCLIService.prototype.clone).toHaveBeenCalledWith("https://github.com/target-org/reponame.git", cwd, "v2");
+    expect(GitCLIService.prototype.clone).toHaveBeenCalledWith("https://github.com/target-org/reponame.git", cwd, "v3");
+
+    // the "upstream" remote (pointing back at the original pr's repo) must be (re)added on every
+    // iteration since the working folder is reused across target branches
+    expect(GitCLIService.prototype.addRemote).toHaveBeenCalledTimes(3);
+    expect(GitCLIService.prototype.addRemote).toHaveBeenCalledWith(cwd, "https://github.com/owner/reponame.git", "upstream");
+
+    // the commit to backport is fetched by sha from the original repo (once per target branch)
+    expect(GitCLIService.prototype.fetch).toHaveBeenCalledTimes(3);
+    expect(GitCLIService.prototype.fetch).toHaveBeenCalledWith(cwd, "28f63db774185f4ec4b57cd9aaeb12dbfb4c9ecc", "upstream");
+
+    expect(GitCLIService.prototype.push).toHaveBeenCalledTimes(3);
+    expect(GitCLIService.prototype.push).toHaveBeenCalledWith(cwd, "bp-v1-28f63db", undefined);
+    expect(GitCLIService.prototype.push).toHaveBeenCalledWith(cwd, "bp-v2-28f63db", undefined);
+    expect(GitCLIService.prototype.push).toHaveBeenCalledWith(cwd, "bp-v3-28f63db", undefined);
+
+    expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledTimes(3);
+    expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith(expect.objectContaining({
+      owner: "target-org",
+      repo: "reponame",
+      cloneUrl: "https://github.com/target-org/reponame.git",
+      base: "v1",
+    }));
+    expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith(expect.objectContaining({
+      owner: "target-org",
+      repo: "reponame",
+      cloneUrl: "https://github.com/target-org/reponame.git",
+      base: "v2",
+    }));
+    expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith(expect.objectContaining({
+      owner: "target-org",
+      repo: "reponame",
+      cloneUrl: "https://github.com/target-org/reponame.git",
+      base: "v3",
+    }));
   });
 
   test("with multiple target branches and multiple bp names", async () => {
@@ -1079,6 +1237,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "custom1",
         base: "v1",
         title: "[v1] PR Title",
@@ -1091,6 +1250,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "custom2",
         base: "v2",
         title: "[v2] PR Title",
@@ -1103,6 +1263,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "custom3",
         base: "v3",
         title: "[v3] PR Title",
@@ -1165,6 +1326,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "custom-failure-head-v1",
         base: "v1",
         title: "[v1] PR Title",
@@ -1177,6 +1339,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "custom-failure-head-v2",
         base: "v2",
         title: "[v2] PR Title",
@@ -1189,6 +1352,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "custom-failure-head-v3",
         base: "v3",
         title: "[v3] PR Title",
@@ -1329,6 +1493,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "custom-failure-head-v1",
         base: "v1",
         title: "[v1] PR Title",
@@ -1341,6 +1506,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "custom-failure-head-v2",
         base: "v2",
         title: "[v2] PR Title",
@@ -1353,6 +1519,7 @@ describe("cli runner", () => {
     expect(GitHubClient.prototype.createPullRequest).toHaveBeenCalledWith({
         owner: "owner",
         repo: "reponame",
+        cloneUrl: "https://github.com/owner/reponame.git",
         head: "custom-failure-head-v3",
         base: "v3",
         title: "[v3] PR Title",
