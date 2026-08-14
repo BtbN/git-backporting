@@ -1366,7 +1366,9 @@ git cherry-pick -m 1 --strategy=recursive --strategy-option=theirs 28f63db774185
 git push origin custom-failure-head-v1
 # the step below failed
 # codeberg.createPullRequest
-${"```"}`);
+${"```"}
+
+<!-- git-backporting: backport to v1 failed -->`);
     expect(GitHubClient.prototype.createPullRequestComment).toHaveBeenCalledWith("https://codeberg.org/api/v1/repos/owner/reponame/pulls/2368", `The backport to ${"`v2`"} failed. Check the latest run for more details.
 
 Reconstruction of the attempted steps (beware that escaping may be missing):
@@ -1378,7 +1380,9 @@ git cherry-pick -m 1 --strategy=recursive --strategy-option=theirs 28f63db774185
 git push origin custom-failure-head-v2
 # the step below failed
 # codeberg.createPullRequest
-${"```"}`);
+${"```"}
+
+<!-- git-backporting: backport to v2 failed -->`);
     expect(GitHubClient.prototype.createPullRequestComment).toHaveBeenCalledWith("https://codeberg.org/api/v1/repos/owner/reponame/pulls/2368", `The backport to ${"`v3`"} failed. Check the latest run for more details.
 
 Reconstruction of the attempted steps (beware that escaping may be missing):
@@ -1390,7 +1394,9 @@ git fetch origin pull/2368/head:pr/2368
 git cherry-pick -m 1 --strategy=recursive --strategy-option=theirs 28f63db774185f4ec4b57cd9aaeb12dbfb4c9ecc
 git push origin custom-failure-head-v3
 # codeberg.createPullRequest
-${"```"}`);
+${"```"}
+
+<!-- git-backporting: backport to v3 failed -->`);
 
     createPullRequestSpy.mockReset();
     cherryPickSpy.mockReset();

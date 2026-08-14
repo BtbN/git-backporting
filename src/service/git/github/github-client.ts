@@ -99,6 +99,38 @@ export default class GitHubClient implements GitClient {
     return this.getPullRequest(owner, project, id, squash);
   }
 
+  async getLatestPullRequestComments(prUrl: string): Promise<string[]> {
+    const { owner, project, id } = this.extractPullRequestData(prUrl);
+    this.logger.debug(`Fetching latest comments of pull request ${owner}/${project}/${id}`);
+
+    const perPage = 100;
+    const params = {
+      owner: owner,
+      repo: project,
+      issue_number: id,
+      per_page: perPage,
+    };
+
+    const { data, headers } = await this.octokit.issues.listComments(params);
+    const lastPage = this.extractLastPage(headers, perPage);
+    if (lastPage > 1) {
+      const last = await this.octokit.issues.listComments({ ...params, page: lastPage });
+      return last.data.map(c => c.body ?? "");
+    }
+
+    return data.map(c => c.body ?? "");
+  }
+
+  private extractLastPage(headers: { link?: string, [header: string]: string | number | undefined }, perPage: number): number {
+    const last = /[?&]page=(\d+)[^>]*>;\s*rel="last"/.exec(headers.link ?? "");
+    if (last) {
+      return parseInt(last[1]);
+    }
+
+    const total = parseInt(`${headers["x-total-count"]}`);
+    return isNaN(total) ? 1 : Math.ceil(total / perPage);
+  }
+
   /**
    * Read the message out of a git.getCommit response. GitHub returns it at the top level
    * (`message`), whereas Gitea/Forgejo nest it under `commit` (`commit.message`). Support
