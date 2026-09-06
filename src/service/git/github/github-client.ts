@@ -148,6 +148,7 @@ export default class GitHubClient implements GitClient {
       base: backport.base,
       title: backport.title,
       body: backport.body,
+      maintainer_can_modify: true,
     });
 
     if (!data) {
