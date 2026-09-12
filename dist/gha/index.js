@@ -604,6 +604,16 @@ class GitCLIService {
         await this.git(cwd).fetch(remote, branch, ["--quiet"]);
     }
     /**
+     * Check if a branch exists in a remote repository.
+     * @param remote remote name or URL
+     * @param branch branch name to search
+     */
+    async remoteBranchExists(remote, branch) {
+        this.logger.info(`Checking if branch ${branch} exists on ${remote}`);
+        const output = await (0, simple_git_1.default)().raw(["ls-remote", "--heads", this.remoteWithAuth(remote), branch]);
+        return output.trim().length > 0;
+    }
+    /**
      * Get cherry-pick a specific sha
      * @param cwd repository in which the sha should be cherry picked to
      * @param sha commit sha
@@ -1716,6 +1726,12 @@ class Runner {
         return token;
     }
     async executeBackport(configs, backportPR, git) {
+        const remote = backportPR.headRepo?.cloneUrl ?? backportPR.cloneUrl;
+        const branchExists = await git.gitCli.remoteBranchExists(remote, backportPR.head);
+        if (branchExists) {
+            this.logger.warn(`Backport branch ${backportPR.head} already exists on ${remote}, skipping`);
+            return;
+        }
         let i = 0;
         for (const step of backportSteps(this.logger, configs, backportPR, git)) {
             try {
@@ -1840,6 +1856,9 @@ async function backportScript(configs, backportPR, git, failed) {
         },
         async fetch(_cwd, branch, remote = "origin") {
             s += `git fetch ${remote} ${branch}`;
+        },
+        async remoteBranchExists(_remote, _branch) {
+            return false;
         },
         async cherryPick(_cwd, sha, strategy = "recursive", strategyOption = "theirs", cherryPickOptions) {
             s += `git cherry-pick -m 1 --strategy=${strategy} --strategy-option=${strategyOption} `;
