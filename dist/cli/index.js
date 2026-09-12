@@ -1037,6 +1037,7 @@ class GitHubClient {
             base: backport.base,
             title: backport.title,
             body: backport.body,
+            maintainer_can_modify: true,
         });
         if (!data) {
             throw new Error("Pull request creation failed");
